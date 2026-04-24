@@ -47,7 +47,7 @@ ifneq ($(strip $(YK_BUILD_TYPE)),)
 
 # Include path for yk.h.  -DUSE_YK is stripped here and re-added as YK_DEFINE
 # so that source files can use #ifdef USE_YK without a duplicate-macro warning.
-YK_CPPFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --cppflags | sed 's/ *-DUSE_YK//')
+YK_CPPFLAGS	:= $(shell yk-config ${YK_BUILD_TYPE} --cppflags | sed 's/ *-DUSE_YK//')
 
 # Compile-time flags required by the Yk LLVM pipeline:
 #   -flto                         emit LLVM bitcode; Yk's LTO passes require it
@@ -55,14 +55,14 @@ YK_CPPFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --cppflags | sed 's/ *-DUSE_YK//')
 #   -mllvm -yk-dont-opt-func-abi  prevent ABI-changing optimisations on traced fns
 #   -mllvm -yk-patch-control-point mark control-point calls for later patching
 #   -mllvm -yk-no-vectorize       disable vectorisation inside traced regions
-YK_CFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --cflags)
+YK_CFLAGS	:= $(shell yk-config ${YK_BUILD_TYPE} --cflags)
 
 INCLUDES	= -I$(SRC_DIR) $(YK_CPPFLAGS)
 YK_DEFINE	= -DUSE_YK
 
 # Linker flags: --yk-embed-ir (embed AOT IR), --export-dynamic (expose globals
 # to dlsym), plus rpath entries for the Yk runtime shared libraries.
-YK_LDFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --ldflags)
+YK_LDFLAGS	:= $(shell yk-config ${YK_BUILD_TYPE} --ldflags)
 
 # OPT_FLAGS must also be passed at link time: with LTO, optimisation happens
 # during the link step, so the LTO backend needs the level explicitly.
@@ -70,12 +70,12 @@ YK_LDFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --ldflags)
 LDFLAGS_EXTRA	= $(YK_LDFLAGS) $(COMPILER_ARCH) $(OPT_FLAGS)
 
 # Runtime library (-lykcapi) that exposes the yk_mt_* C API.
-YK_LIBS		:= $(yk-config ${YK_BUILD_TYPE} --libs)
+YK_LIBS		:= $(shell yk-config ${YK_BUILD_TYPE} --libs)
 CSOM_LIBS_EXTRA	= $(YK_LIBS)
 
 # Use the Yk-patched clang for both compilation and linking so that the
 # custom LLVM passes and LTO plugin are available.
-YK_CC		:= $(yk-config ${YK_BUILD_TYPE} --cc)
+YK_CC		:= $(shell yk-config ${YK_BUILD_TYPE} --cc)
 CC_LINK	:= $(YK_CC)
 
 else

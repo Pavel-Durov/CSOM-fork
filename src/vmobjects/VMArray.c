@@ -106,9 +106,9 @@ pVMObject _VMArray_get_indexable_field(void* _self, int64_t index) {
     if(index >= SEND(self, get_number_of_indexable_fields) || index < 0) {
         char* s = (char*)internal_allocate(128);
         if(index >= SEND(self, get_number_of_indexable_fields))
-            sprintf(s, "index too large in array access: %lld", index);
+            sprintf(s, "index too large in array access: %ld", index);
         else
-            sprintf(s, "index too small in array access: %lld", index);
+            sprintf(s, "index too small in array access: %ld", index);
         Universe_error_exit(s);
     }
     // get the indexable field with the given index
@@ -122,9 +122,9 @@ void _VMArray_set_indexable_field(void* _self, int64_t index, pVMObject value) {
     if(index >= SEND(self, get_number_of_indexable_fields) || index < 0) {
         char* s = (char*)internal_allocate(128);
         if(index >= SEND(self, get_number_of_indexable_fields))
-            sprintf(s, "index too large in array access: %lld", index);
+            sprintf(s, "index too large in array access: %ld", index);
         else
-            sprintf(s, "index too small in array access: %lld", index);
+            sprintf(s, "index too small in array access: %ld", index);
         Universe_error_exit(s);
     }
     // set the indexable field with the given index to the given value

@@ -56,6 +56,11 @@ THE SOFTWARE.
 
 #include <misc/debug.h>
 
+#ifdef USE_YK
+#include <yk.h>
+YkMT *global_yk_mt = NULL;
+#endif
+
 // Here we go:
 // externally refenced variables:
 pVMObject nil_object;
@@ -424,6 +429,21 @@ pVMObject Universe_interpret(const char* class_name, const char* method_name) {
 
 void Universe_start(int argc, const char** argv) {
     gc_initialize();
+
+    if (getenv("CSOM_LOG_INTERP") != NULL) {
+        dump_bytecodes = 2;
+    }
+
+#ifdef USE_YK
+    char *yk_err = NULL;
+    global_yk_mt = yk_mt_new(&yk_err);
+    if (yk_err != NULL) {
+        fprintf(stderr, "[YK] init failed: %s\n", yk_err);
+        free(yk_err);
+        global_yk_mt = NULL;
+    }
+#endif
+
     pVMObject system_object = initialize_object_system();
     pVMMethod bootstrap_method = create_bootstrap_method();
 
@@ -482,6 +502,13 @@ void Universe_destruct(void) {
     for(size_t i = 0; i < cp_count; i++)
         SEND(class_path[i], free);
     internal_free(class_path);
+
+#ifdef USE_YK
+    if (global_yk_mt != NULL) {
+        yk_mt_shutdown(global_yk_mt);
+        global_yk_mt = NULL;
+    }
+#endif
 }
 
 
@@ -790,7 +817,7 @@ pVMClass Universe_get_block_class_with_args(int64_t number_of_arguments) {
     // Compute the name of the block class with the given number of arguments
     char block_name[7];
     Universe_assert(number_of_arguments <10); // buffer overflow otherwise
-    sprintf(block_name, "Block%lld", number_of_arguments);
+    sprintf(block_name, "Block%ld", number_of_arguments);
     pVMSymbol name = Universe_symbol_for_cstr(block_name);
     
     // Lookup the specific block class in the dictionary of globals and return

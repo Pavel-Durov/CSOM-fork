@@ -104,7 +104,7 @@ void _VMBlock_mark_references(void* _self) {
 //
 
 
-static VTABLE(VMBlock) _VMBlock_vtable;
+VTABLE(VMBlock) _VMBlock_vtable;
 bool VMBlock_vtable_inited = false;
 
 

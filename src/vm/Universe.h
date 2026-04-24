@@ -72,8 +72,12 @@ extern pVMSymbol run_sym;
 // for runtime debug
 extern short dump_bytecodes;
 extern short gc_verbosity;
- 
- 
+
+#ifdef USE_YK
+#include <yk.h>
+extern YkMT *global_yk_mt;
+#endif
+
 void          Universe_exit(int)                        __attribute__((noreturn));
 void          Universe_error_exit(const char* restrict) __attribute__((noreturn));
 

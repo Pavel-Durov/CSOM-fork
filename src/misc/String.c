@@ -145,7 +145,7 @@ void _String_free(void* self) {
 }
 
 
-size_t _String_length(void* _self) {
+static size_t _String_length(void* _self) {
     pString self = (pString)_self;
     return self->length;
 }

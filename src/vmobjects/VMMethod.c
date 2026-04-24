@@ -44,6 +44,11 @@ THE SOFTWARE.
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <string.h>
+
+#ifdef USE_YK
+#include <yk.h>
+#endif
 
 
 //
@@ -70,6 +75,24 @@ pVMMethod VMMethod_new(size_t number_of_bytecodes, size_t number_of_constants,
     }
     return result;
 }
+
+
+#ifdef USE_YK
+/**
+ * Clean up Yk locations for a VMMethod
+ */
+void VMMethod_cleanup_yklocs(pVMMethod method) {
+   YkLocation* locs = (YkLocation*)method->yklocs;
+    for (size_t i = 0; i < method->bytecodes_length; i++) {
+        // Only drop locations that are not null (state != 0)
+        if (!yk_location_is_null(locs[i])) {
+            yk_location_drop(locs[i]);
+        }
+    }
+    free(method->yklocs);
+    method->yklocs = NULL;
+}
+#endif
 
 
 pVMMethod VMMethod_assemble(method_generation_context* mgenc) {
@@ -113,8 +136,21 @@ void _VMMethod_init(void* _self, ...) {
     self->signature        = va_arg(args,pVMSymbol);
     
     va_end(args);
-    
+
     self->number_of_arguments = Signature_get_number_of_arguments(self->signature);
+
+#ifdef USE_YK
+    // Allocate YkLocation array for each bytecode
+    if (self->bytecodes_length > 0) {
+        self->yklocs = (void *)malloc(self->bytecodes_length * sizeof(YkLocation));
+        if (self->yklocs != NULL) {
+            YkLocation* locs = (YkLocation*)self->yklocs;
+            for (size_t i = 0; i < self->bytecodes_length; i++) {
+                locs[i] = yk_location_new();
+            }
+        }
+    }
+#endif
 }
 
 

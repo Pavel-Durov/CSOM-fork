@@ -70,6 +70,9 @@ VTABLE(VMMethod) {
 struct _VMMethod {
     VTABLE(VMMethod)* _vtable;
     METHOD_FORMAT;
+#ifdef USE_YK
+    void*      yklocs;  /* YkLocation array, one per bytecode */
+#endif
 };
 
 
@@ -81,6 +84,10 @@ pVMMethod VMMethod_new(size_t number_of_constants, size_t number_of_bytecodes,
                        size_t max_number_of_stack_elements,
                        pVMSymbol signature);
 pVMMethod VMMethod_assemble(method_generation_context* mgenc);
+
+#ifdef USE_YK
+void VMMethod_cleanup_yklocs(pVMMethod method);
+#endif
 
 
 #pragma mark vtable initialization

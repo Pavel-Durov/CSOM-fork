@@ -32,13 +32,71 @@ ifeq ($(CC),)
 endif
 
 OPT_FLAGS	=-O3
-CFLAGS		=$(COMPILER_ARCH) -Wno-endif-labels -std=gnu99 $(DBG_FLAGS) $(OPT_FLAGS) $(INCLUDES)
-LDFLAGS		=$(COMPILER_ARCH) $(LIBRARIES)
+
+# ---------------------------------------------------------------------------
+# Yk JIT integration
+#
+# Set YK_BUILD_TYPE=debug or YK_BUILD_TYPE=release to build with Yk.
+# When unset the build is a plain interpreter with no JIT.
+#
+# All Yk variables are resolved via `yk-config`, which must be on PATH.
+# The block MUST appear before the CFLAGS definition below so that YK_CFLAGS
+# and YK_CPPFLAGS are available when CFLAGS is expanded.
+# ---------------------------------------------------------------------------
+ifneq ($(strip $(YK_BUILD_TYPE)),)
+
+# Include path for yk.h.  -DUSE_YK is stripped here and re-added as YK_DEFINE
+# so that source files can use #ifdef USE_YK without a duplicate-macro warning.
+YK_CPPFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --cppflags | sed 's/ *-DUSE_YK//')
+
+# Compile-time flags required by the Yk LLVM pipeline:
+#   -flto                         emit LLVM bitcode; Yk's LTO passes require it
+#   -fyk-noinline-funcs-with-loops keep loop bodies in their own functions
+#   -mllvm -yk-dont-opt-func-abi  prevent ABI-changing optimisations on traced fns
+#   -mllvm -yk-patch-control-point mark control-point calls for later patching
+#   -mllvm -yk-no-vectorize       disable vectorisation inside traced regions
+YK_CFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --cflags)
+
+INCLUDES	= -I$(SRC_DIR) $(YK_CPPFLAGS)
+YK_DEFINE	= -DUSE_YK
+
+# Linker flags: --yk-embed-ir (embed AOT IR), --export-dynamic (expose globals
+# to dlsym), plus rpath entries for the Yk runtime shared libraries.
+YK_LDFLAGS	:= $(yk-config ${YK_BUILD_TYPE} --ldflags)
+
+# OPT_FLAGS must also be passed at link time: with LTO, optimisation happens
+# during the link step, so the LTO backend needs the level explicitly.
+# (See the yklua reference Makefile for the same pattern.)
+LDFLAGS_EXTRA	= $(YK_LDFLAGS) $(COMPILER_ARCH) $(OPT_FLAGS)
+
+# Runtime library (-lykcapi) that exposes the yk_mt_* C API.
+YK_LIBS		:= $(yk-config ${YK_BUILD_TYPE} --libs)
+CSOM_LIBS_EXTRA	= $(YK_LIBS)
+
+# Use the Yk-patched clang for both compilation and linking so that the
+# custom LLVM passes and LTO plugin are available.
+YK_CC		:= $(yk-config ${YK_BUILD_TYPE} --cc)
+CC_LINK	:= $(YK_CC)
+
+else
+# Plain (non-Yk) build — all Yk variables are empty/default.
+INCLUDES	= -I$(SRC_DIR)
+YK_DEFINE	=
+YK_CFLAGS	=
+LDFLAGS_EXTRA	=
+CSOM_LIBS_EXTRA	=
+YK_CC		= $(CC)
+CC_LINK	= $(CC)
+endif
+
+CFLAGS		=$(COMPILER_ARCH) -Wno-endif-labels -std=gnu99 $(DBG_FLAGS) $(OPT_FLAGS) $(INCLUDES) $(YK_DEFINE) $(YK_CFLAGS)
+LDFLAGS		=$(COMPILER_ARCH) $(LIBRARIES) $(LDFLAGS_EXTRA)
 
 INSTALL		=install
 
-CSOM_LIBS	=-ldl
-CORE_LIBS	=-lm
+# -ldl  needed for dlopen/dlsym (primitive loader)
+# -lm   needed by the Double primitive
+CSOM_LIBS	=-ldl -lm $(CSOM_LIBS_EXTRA)
 
 CSOM_NAME	=CSOM
 SOM_NAME	=SOM
@@ -83,11 +141,16 @@ VM_OBJ			= $(VM_SRC:.c=.o)
 VMOBJECTS_SRC	= $(wildcard $(VMOBJECTS_DIR)/*.c)
 VMOBJECTS_OBJ	= $(VMOBJECTS_SRC:.c=.o)
 
-############# primitives location etc.
+############# primitives
+# Compiled as regular .o files and linked directly into the CSOM binary.
+# Previously these were built as -fPIC .pic.o files for a separate SOMCore.so
+# shared library.  The single-binary layout is required for Yk: it ensures the
+# LTO pass sees the whole program at once and --export-dynamic covers all
+# symbols, making them findable via dlsym at JIT runtime.
 
 PRIMITIVES_DIR	= $(SRC_DIR)/primitives
 PRIMITIVES_SRC	= $(wildcard $(PRIMITIVES_DIR)/*.c)
-PRIMITIVES_OBJ	= $(PRIMITIVES_SRC:.c=.pic.o)
+PRIMITIVES_OBJ	= $(PRIMITIVES_SRC:.c=.o)
 
 ############# unit tests
 
@@ -97,14 +160,16 @@ UNITTEST_OBJ	= $(UNITTEST_SRC:.c=.o)
 
 ############# include path
 
-INCLUDES		=-I$(SRC_DIR)
 LIBRARIES       =
 
 ##############
 ############## Collections.
 
+# Primitives are included in CSOM_OBJ so they participate in the same LTO
+# link step as the interpreter and VM.
 CSOM_OBJ		=  $(MEMORY_OBJ) $(MISC_OBJ) $(VMOBJECTS_OBJ) \
-					$(COMPILER_OBJ) $(INTERPRETER_OBJ) $(VM_OBJ)
+					$(COMPILER_OBJ) $(INTERPRETER_OBJ) $(VM_OBJ) \
+					$(PRIMITIVES_OBJ)
 OBJECTS			= $(CSOM_OBJ) $(PRIMITIVES_OBJ)
 
 SOURCES			=  $(COMPILER_SRC) $(INTERPRETER_SRC) $(MEMORY_SRC) \
@@ -113,7 +178,7 @@ SOURCES			=  $(COMPILER_SRC) $(INTERPRETER_SRC) $(MEMORY_SRC) \
 
 ############# Things to clean
 
-CLEAN			= $(OBJECTS) CORE $(SRC_DIR)/unittest
+CLEAN			= $(OBJECTS) $(SRC_DIR)/unittest
 
 ############# Tools
 
@@ -125,11 +190,9 @@ OSTOOL			= $(BUILD_DIR)/ostool.exe
 #  metarules
 #
 
-.SUFFIXES: .pic.o
-
 .PHONY: clean clobber test
 
-all: $(OSTOOL) $(SRC_DIR)/platform.h CORE $(SRC_DIR)/CSOM
+all: $(OSTOOL) $(SRC_DIR)/platform.h $(SRC_DIR)/CSOM
 
 
 debug : OPT_FLAGS=-O0
@@ -155,8 +218,9 @@ em-awfy : EMBED_FILES+=--embed-file $(AWFY_ROOT)
 em-awfy: emscripten
 
 
-.c.pic.o:
-	$(CC) $(CFLAGS) -fPIC -c $< -o $*.pic.o
+# Pattern rule for compiling all .c files to .o files
+%.o: %.c
+	$(YK_CC) $(CFLAGS) -c $< -o $@
 
 
 clean:
@@ -186,21 +250,12 @@ core-lib/.gitignore:
 #
 
 
-$(SRC_DIR)/CSOM: $(CSOM_OBJ) CORE
+$(SRC_DIR)/CSOM: $(CSOM_OBJ)
 	@echo Linking CSOM
-	$(CC) $(MAIN_MODULE) $(DBG_FLAGS) $(LDFLAGS) `$(OSTOOL) l`\
+	$(CC_LINK) $(MAIN_MODULE) $(DBG_FLAGS) $(LDFLAGS) `$(OSTOOL) l`\
 		-o `$(OSTOOL) x "$(CSOM_NAME)"` \
 		$(CSOM_OBJ) $(CSOM_LIBS)
 	@echo CSOM done.
-
-CORE: core-lib/.gitignore $(PRIMITIVES_OBJ)
-	@echo Linking SOMCore lib
-	$(CC) $(SIDE_MODULE) $(DBG_FLAGS) $(LDFLAGS) `$(OSTOOL) l "$(CORE_NAME)"` \
-		-o `$(OSTOOL) s "$(CORE_NAME)"`\
-		$(PRIMITIVES_OBJ) $(CORE_LIBS)
-	mv `$(OSTOOL) s "$(CORE_NAME)"` $(ST_DIR)
-	@touch CORE
-	@echo SOMCore done.
 
 install: all
 	@echo installing CSOM into build

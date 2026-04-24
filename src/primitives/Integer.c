@@ -248,8 +248,8 @@ void  _Integer_asString(pVMObject object, pVMFrame frame) {
     // temporary storage for the number string
     // use c99 snprintf-goodie
     int64_t integer = SEND(self,  get_embedded_integer);
-    char* strbuf = (char *)internal_allocate(snprintf(0, 0, "%lld", integer) +1);
-    sprintf(strbuf, "%lld", integer);
+    char* strbuf = (char *)internal_allocate(snprintf(0, 0, "%ld", integer) +1);
+    sprintf(strbuf, "%ld", integer);
 
     SEND(frame, push, (pVMObject) Universe_new_string_cstr(strbuf));
     internal_free(strbuf);    

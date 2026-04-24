@@ -40,9 +40,14 @@ THE SOFTWARE.
 #include <stdbool.h>
 #include <stddef.h>
 
+#ifdef USE_YK
+#include <yk.h>
+#endif
+
 
 // class variable.
-static pVMFrame frame;
+
+pVMFrame frame;
 
 // convenience macros for frequently used function invocations
 #define _FRAME Interpreter_get_frame()
@@ -408,7 +413,11 @@ void Interpreter_start(void) {
         size_t next_bytecode_index = bytecode_index + bytecode_length;
         // update the bytecode index of the frame
         SEND(_FRAME, set_bytecode_index, next_bytecode_index);
-        
+
+#ifdef USE_YK
+        yk_mt_control_point(global_yk_mt, &((YkLocation*)method->yklocs)[bytecode_index]);
+#endif
+
         // Handle the current bytecode
         switch(bytecode) {
             case BC_HALT:             return; // handle the halt bytecode

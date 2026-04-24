@@ -434,26 +434,12 @@ pString gen_core_loadstring(const pString restrict cp) {
  *
  */
 void* load_lib(const pString restrict path) {
-
-    #if !defined(CSOM_WIN)
-        #ifdef DEBUG
-            #define    DL_LOADMODE RTLD_NOW
-        #else
-            #define    DL_LOADMODE RTLD_LAZY
-        #endif // DEBUG
-    #endif
-    
-    // static handle. will be returned
-    static void* handle = NULL;
-    
-    // try load lib
-    if ((handle = dlopen(SEND(path, rawChars), DL_LOADMODE))) {
-        // found
-        return handle;
-    } else {
-        printf("dlopen failed with: %s\n", dlerror());
-        return NULL;
-    }
+    // Primitives are linked statically into the CSOM binary. Open the main
+    // executable (NULL) so dlsym finds supports_class, init_csp, and all
+    // _ClassName_method symbols without loading a separate shared library.
+    // RTLD_DEFAULT is ((void*)0) on Linux and cannot be used as a handle.
+    (void)path;
+    return dlopen(NULL, RTLD_LAZY);
 }
 
 
